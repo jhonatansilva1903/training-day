@@ -1,14 +1,14 @@
-// Training Day — edição de exercícios e dias
-// Mantém: carga, reps, séries, PR, XP por exercício/dia e Timer
-// Novidades: combobox para nome do exercício, adicionar/excluir cards, gerenciar dias
+// Training Day — script.js (com seleção de treino para exportar)
+// Mantém DnD, renomear treinos, combobox, séries, timer, PR/XP, responsivo.
+// Exportar treino abre modal para escolher QUAL treino e gera PDF com os cards como no site.
 
 const SEED = window.__SEED__;
-const STORAGE_KEY = "training_day_v1";
-const PLAN_KEY = "training_day_plan_v1"; // estrutura de dias + lista de exercícios
+const STORAGE_KEY = "training_day_state_v1";
+const PLAN_KEY = "training_day_plan_v3";
+const { jsPDF } = window.jspdf || {};
 
-// Sugestões — aparelhos e exercícios comuns (pode estender à vontade)
+// ===== Combobox =====
 const EXERCISE_OPTIONS = [
-  // Peito
   "Supino reto barra",
   "Supino inclinado barra",
   "Supino declinado barra",
@@ -18,7 +18,6 @@ const EXERCISE_OPTIONS = [
   "Voador máquina",
   "Cross-over cabo alto",
   "Cross-over cabo baixo",
-  // Costas
   "Puxada frente barra",
   "Puxada aberta",
   "Puxada neutra",
@@ -27,7 +26,6 @@ const EXERCISE_OPTIONS = [
   "Remada cavalinho",
   "Remada unilateral halter",
   "Pull-over",
-  // Pernas
   "Agachamento livre",
   "Agachamento smith",
   "Hack squat",
@@ -38,59 +36,56 @@ const EXERCISE_OPTIONS = [
   "Stiff barra",
   "Panturrilha em pé",
   "Panturrilha sentado",
-  // Ombro
   "Desenvolvimento halteres",
   "Desenvolvimento barra",
   "Elevação lateral",
   "Elevação frontal",
   "Remada alta",
   "Arnold press",
-  // Bíceps
   "Rosca direta barra",
   "Rosca alternada",
   "Rosca martelo",
   "Rosca scott",
   "Rosca concentrada",
   "Cable Curl",
-  // Tríceps
   "Tríceps testa",
   "Tríceps corda (pushdown)",
   "Mergulho paralelas",
   "Overhead triceps",
   "Kickback",
-  // Core
   "Abdominal crunch",
   "Abs Cable Crunch",
   "Prancha",
   "Elevação de pernas",
-  // Extras já usados
   "Puxador alto",
   "Bar cable row",
   "Reverse grip pull down",
   "Hack",
   "Extensora",
-  "Mesa flexora",
   "Cadeira extensora",
   "Panturrilha em pé",
   "Remada curvada",
-  "Abs Cable Crunch",
   "Rosca alternada",
+  "Novo exercício",
 ];
+(function ensureExerciseOptions() {
+  const dl = document.getElementById("exerciseOptions");
+  dl.innerHTML = "";
+  EXERCISE_OPTIONS.forEach((opt) => {
+    const o = document.createElement("option");
+    o.value = opt;
+    dl.appendChild(o);
+  });
+})();
 
-// ===== Estado persistente =====
+// ===== Estado/Persistência =====
 let state = loadState();
-let plan = loadPlan(); // { [day]: [exerciseName, ...] }
-ensureExerciseOptions();
-
-let currentDay = Object.keys(plan)[0] || "Segunda";
-
-// ======= Helpers persistência =======
+let plan = loadPlan();
 function loadState() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     return raw ? JSON.parse(raw) : { logs: {}, prs: {} };
-  } catch (e) {
-    console.warn("Falha ao ler localStorage:", e);
+  } catch {
     return { logs: {}, prs: {} };
   }
 }
@@ -102,81 +97,110 @@ function loadPlan() {
   try {
     const raw = localStorage.getItem(PLAN_KEY);
     if (raw) return JSON.parse(raw);
-  } catch (e) {
-    console.warn("Falha ao ler plano:", e);
-  }
-  // se não existir, parte do SEED
-  return structuredClone(SEED);
+  } catch {}
+  return { __order: Object.keys(SEED), days: structuredClone(SEED) };
 }
 function savePlan() {
   localStorage.setItem(PLAN_KEY, JSON.stringify(plan));
 }
-
-function ensureExerciseOptions() {
-  const dl = document.getElementById("exerciseOptions");
-  dl.innerHTML = "";
-  EXERCISE_OPTIONS.forEach((opt) => {
-    const o = document.createElement("option");
-    o.value = opt;
-    dl.appendChild(o);
-  });
+function getDayOrder() {
+  return (plan.__order || Object.keys(plan.days)).filter(
+    (d) => d && plan.days[d]
+  );
 }
 
-// ======= Cálculos XP/PR =======
+// ===== Cálculos =====
 const volume = (load, reps) => (Number(load) || 0) * (Number(reps) || 0);
 const targetFor = (pr) => Math.max(pr * 1.1, pr + 5, 20);
 const progressPct = (vol, pr) => {
   const target = targetFor(pr);
-  if (pr <= 0) return Math.min(100, Math.round((vol / target) * 100));
-  return Math.min(100, Math.round((vol / target) * 100));
+  return Math.min(100, Math.round(target ? (vol / target) * 100 : 0));
 };
-const key = (day, name) => day + "::" + name;
-const lastLog = (id) => {
-  const logs = state.logs[id] || [];
-  return logs.length ? logs[logs.length - 1] : null;
-};
+const keyOf = (day, name) => `${day}::${name}`;
+const lastLog = (id) => (state.logs[id] || []).slice(-1)[0] || null;
 
-// ======= UI inicial =======
-const nav = document.querySelector("nav");
+// ===== Seletores =====
+const tabs = document.getElementById("daysTabs");
+const cardsBox = document.getElementById("cards");
+const addBtn = document.getElementById("addExerciseBtn");
+const saveBtn = document.getElementById("saveDay");
+const resetBtn = document.getElementById("resetWeek");
+const exportBtn = document.getElementById("exportPdfBtn");
+const manageBtn = document.getElementById("manageTrainingsBtn");
+
+// Export modal
+const exportModal = document.getElementById("exportModal");
+const exportClose = document.getElementById("exportClose");
+const exportSelect = document.getElementById("exportSelect");
+const exportConfirm = document.getElementById("exportConfirm");
+
+let currentDay = getDayOrder()[0] || "Treino 1";
+
+// ===== Abas (DnD) =====
 function renderTabs() {
-  nav.innerHTML = "";
-  Object.keys(plan).forEach((d) => {
+  tabs.innerHTML = "";
+  getDayOrder().forEach((d) => {
     const btn = document.createElement("button");
     btn.className =
       "glass rounded-xl px-3 py-2 text-sm hover:bg-gray-800 border border-gray-700";
     btn.textContent = d;
     btn.dataset.day = d;
-    btn.onclick = () => setDay(d);
+    btn.draggable = true;
+    btn.addEventListener("click", () => setDay(d));
+    btn.addEventListener("dragstart", onDayDragStart);
+    btn.addEventListener("dragover", onDayDragOver);
+    btn.addEventListener("drop", onDayDrop);
     if (d === currentDay) btn.classList.add("tab-active");
-    nav.appendChild(btn);
+    tabs.appendChild(btn);
   });
 }
-renderTabs();
-setDay(currentDay);
+let draggedDay = null;
+function onDayDragStart(e) {
+  draggedDay = e.currentTarget.dataset.day;
+  e.dataTransfer.effectAllowed = "move";
+  e.currentTarget.classList.add("dragging");
+}
+function onDayDragOver(e) {
+  e.preventDefault();
+  e.dataTransfer.dropEffect = "move";
+}
+function onDayDrop(e) {
+  e.preventDefault();
+  const targetDay = e.currentTarget.dataset.day;
+  if (!draggedDay || draggedDay === targetDay) return;
+  const order = getDayOrder();
+  const from = order.indexOf(draggedDay),
+    to = order.indexOf(targetDay);
+  order.splice(to, 0, order.splice(from, 1)[0]);
+  plan.__order = order;
+  savePlan();
+  renderTabs();
+  setDay(draggedDay);
+}
+tabs.addEventListener("dragend", () =>
+  tabs.querySelectorAll("button").forEach((b) => b.classList.remove("dragging"))
+);
 
+// ===== Render treino atual =====
 function setDay(day) {
   currentDay = day;
-  document.querySelectorAll("nav button").forEach((b) => {
+  document.getElementById("dayTitle").textContent = day;
+  document.querySelectorAll("#daysTabs button").forEach((b) => {
     if (b.dataset.day === day) b.classList.add("tab-active");
     else b.classList.remove("tab-active");
   });
-
-  document.getElementById("dayTitle").textContent = day;
   renderCards(day);
   updateDayXP();
 }
-
-// ======= Render Cards =======
 function renderCards(day) {
-  const cont = document.getElementById("cards");
-  cont.innerHTML = "";
-  const list = plan[day] || [];
+  cardsBox.innerHTML = "";
+  const list = plan.days[day] || [];
   document.getElementById(
     "exerciseCount"
   ).textContent = `${list.length} exercícios`;
 
-  list.forEach((name) => {
-    const id = key(day, name);
+  list.forEach((name, index) => {
+    const id = keyOf(day, name);
     const last = lastLog(id);
     const pr = state.prs[id] || 0;
     const vol = last ? last.volume : 0;
@@ -184,22 +208,39 @@ function renderCards(day) {
 
     const card = document.createElement("div");
     card.className = "card p-4 rounded-2xl";
+    card.setAttribute("draggable", "true");
+    card.dataset.name = name;
+    card.dataset.index = index;
+
+    // DnD card
+    card.addEventListener("dragstart", onCardDragStart);
+    card.addEventListener("dragover", onCardDragOver);
+    card.addEventListener("drop", onCardDrop);
+    card.addEventListener("dragenter", () => card.classList.add("drop-target"));
+    card.addEventListener("dragleave", () =>
+      card.classList.remove("drop-target")
+    );
+    card.addEventListener("dragend", () =>
+      card.classList.remove("drop-target", "dragging")
+    );
+
     card.innerHTML = `
       <div class="flex items-start justify-between gap-2">
         <div class="flex-1">
-          <!-- Nome do exercício: COMBOBOX (datalist) + texto livre -->
           <label class="text-xs text-gray-400">Exercício</label>
-          <input list="exerciseOptions" value="${name}" class="w-full mt-1 rounded-lg bg-[#0b1220] border border-gray-700 px-3 py-2"
-                 data-id="${id}" data-oldname="${name}" data-field="exerciseName" />
-          <p class="text-[11px] text-gray-500 mt-1">PR: <span data-pr="value">${Math.round(
-            pr
-          )}</span> • Volume atual: <span data-vol="value">${Math.round(
-      vol
-    )}</span></p>
+          <div class="flex items-center gap-2">
+            <span class="cursor-grab select-none text-gray-500" title="Arraste para mover">≡</span>
+            <input list="exerciseOptions" value="${name}" class="w-full rounded-lg bg-[#0b1220] border border-gray-700 px-3 py-2"
+                   data-id="${id}" data-oldname="${name}" data-field="exerciseName" />
+          </div>
+          <p class="text-[11px] text-gray-500 mt-1">
+            PR: <span data-pr="value">${Math.round(pr)}</span> • Volume atual:
+            <span data-vol="value">${Math.round(vol)}</span>
+          </p>
         </div>
         <div class="flex items-center gap-2">
-          <button title="Timer" class="px-2 py-2 rounded-xl border border-gray-700 text-gray-300 hover:bg-gray-800" onclick="openTimer('${name}')">⏱️</button>
-          <button title="Excluir" class="px-2 py-2 rounded-xl border border-gray-700 text-gray-300 hover:bg-gray-800" onclick="deleteExercise('${day}','${name}')">🗑️</button>
+          <button title="Timer" class="px-2 py-2 rounded-xl glass border border-gray-700 hover:bg-gray-800" onclick="openTimer('${name}')">⏱️</button>
+          <button title="Excluir" class="px-2 py-2 rounded-xl glass border border-gray-700 hover:bg-gray-800" onclick="deleteExercise('${day}','${name}')">🗑️</button>
         </div>
       </div>
 
@@ -239,54 +280,65 @@ function renderCards(day) {
       </div>
 
       <div class="mt-4 flex flex-wrap gap-2 justify-end">
-        <button class="px-3 py-2 rounded-xl border border-gray-700 text-gray-300 hover:bg-gray-800" onclick="resetExercise('${id}')">Resetar</button>
+        <button class="px-3 py-2 rounded-xl glass border border-gray-700 hover:bg-gray-800" onclick="resetExercise('${id}')">Resetar</button>
         <button class="px-3 py-2 rounded-2xl btn-primary font-semibold" onclick="saveExercise('${id}', this)">Salvar</button>
       </div>
     `;
-    cont.appendChild(card);
+    cardsBox.appendChild(card);
   });
 
-  // Eventos: live update e rename por combobox
-  cont.querySelectorAll("input").forEach((inp) => {
-    if (inp.dataset.field === "exerciseName") {
+  // Inputs
+  cardsBox.querySelectorAll("input").forEach((inp) => {
+    if (inp.dataset.field === "exerciseName")
       inp.addEventListener("change", onRenameExercise);
-    } else {
-      inp.addEventListener("input", onLiveChange);
-    }
+    else inp.addEventListener("input", onLiveChange);
   });
 }
+let draggedCardIndex = null;
+function onCardDragStart(e) {
+  const card = e.currentTarget;
+  draggedCardIndex = Number(card.dataset.index);
+  e.dataTransfer.effectAllowed = "move";
+  card.classList.add("dragging");
+}
+function onCardDragOver(e) {
+  e.preventDefault();
+  e.dataTransfer.dropEffect = "move";
+}
+function onCardDrop(e) {
+  e.preventDefault();
+  const targetIndex = Number(e.currentTarget.dataset.index);
+  if (draggedCardIndex === targetIndex) return;
+  const arr = plan.days[currentDay];
+  arr.splice(targetIndex, 0, arr.splice(draggedCardIndex, 1)[0]);
+  savePlan();
+  renderCards(currentDay);
+  updateDayXP();
+}
 
-// ======= Adicionar/Excluir Exercícios =======
+// ===== CRUD Exercícios =====
 document.getElementById("addExerciseBtn").onclick = () =>
   addExercise(currentDay);
-
 function addExercise(day) {
-  plan[day] = plan[day] || [];
-  // cria um nome único temporário
-  let base = "Novo exercício";
-  let name = base,
+  plan.days[day] = plan.days[day] || [];
+  let base = "Novo exercício",
+    name = base,
     i = 2;
-  while (plan[day].includes(name)) {
-    name = `${base} ${i++}`;
-  }
-  plan[day].push(name);
+  while (plan.days[day].includes(name)) name = `${base} ${i++}`;
+  plan.days[day].push(name);
   savePlan();
   renderCards(day);
 }
-
 function deleteExercise(day, name) {
-  plan[day] = (plan[day] || []).filter((n) => n !== name);
+  plan.days[day] = (plan.days[day] || []).filter((n) => n !== name);
   savePlan();
-  // apaga só os dados de PR/logs daquele exercício (opcional; aqui mantemos limpeza)
-  const id = key(day, name);
+  const id = keyOf(day, name);
   delete state.logs?.[id];
   delete state.prs?.[id];
   saveState();
   renderCards(day);
   updateDayXP();
 }
-
-// ======= Rename (combobox) =======
 function onRenameExercise(e) {
   const input = e.target;
   const oldId = input.dataset.id;
@@ -294,14 +346,12 @@ function onRenameExercise(e) {
   const newName = (input.value || "").trim() || oldName;
   if (newName === oldName) return;
 
-  // atualiza plan
   const [day] = oldId.split("::");
-  const arr = plan[day] || [];
+  const arr = plan.days[day] || [];
   const idx = arr.indexOf(oldName);
   if (idx >= 0) arr[idx] = newName;
 
-  // migra logs/prs para a nova chave
-  const newId = key(day, newName);
+  const newId = keyOf(day, newName);
   state.logs = state.logs || {};
   state.prs = state.prs || {};
   state.logs[newId] = state.logs[oldId] || [];
@@ -311,11 +361,10 @@ function onRenameExercise(e) {
 
   savePlan();
   saveState();
-  // re-render para atualizar data-id/data-oldname dos inputs
   renderCards(day);
 }
 
-// ======= Live change =======
+// ===== Live + Salvar =====
 function onLiveChange(e) {
   const id = e.target.dataset.id;
   const card = e.target.closest(".card");
@@ -337,17 +386,14 @@ function onLiveChange(e) {
   );
   card.querySelector('[data-pct="label"]').textContent = pct + "%";
   card.querySelector('[data-pct="bar"]').style.width = pct + "%";
-
   updateDayXP();
 }
-
-// ======= Persistência =======
 function saveExercise(id, btnEl) {
   const card = btnEl.closest(".card");
   const titleInput = card.querySelector('input[data-field="exerciseName"]');
   const [day] = id.split("::");
   const name = titleInput.value.trim();
-  const newId = key(day, name);
+  const newId = keyOf(day, name);
 
   const load = Number(
     card.querySelector('input[data-field="load"]').value || 0
@@ -360,9 +406,9 @@ function saveExercise(id, btnEl) {
   );
   const vol = volume(load, reps);
 
-  // se id antigo != novo, migra (caso o usuário tenha alterado o nome e clicado salvar)
   if (newId !== id) {
-    state.logs[newId] = state.logs[id] || [];
+    // migração caso renomeado antes de salvar
+    state.logs[newId] = state.logs[id] || {};
     state.prs[newId] = state.prs[id] || 0;
     delete state.logs[id];
     delete state.prs[id];
@@ -388,71 +434,31 @@ function saveExercise(id, btnEl) {
   );
   card.querySelector('[data-pct="label"]').textContent = pct + "%";
   card.querySelector('[data-pct="bar"]').style.width = pct + "%";
-
   updateDayXP();
 }
-
 function resetExercise(id) {
   delete state.logs[id];
   delete state.prs[id];
   saveState();
   setDay(currentDay);
 }
-
 function updateDayXP() {
   const cards = document.querySelectorAll("#cards .card");
   let sum = 0,
     n = 0;
   cards.forEach((card) => {
-    const pct =
-      parseInt(card.querySelector('[data-pct="label"]').textContent) || 0;
-    sum += pct;
-    n += 1;
+    sum += parseInt(card.querySelector('[data-pct="label"]').textContent) || 0;
+    n++;
   });
   const avg = n ? Math.round(sum / n) : 0;
   document.getElementById("dayXP").style.width = avg + "%";
   document.getElementById("dayXPLabel").textContent = avg + "%";
 }
 
-// Salvar dia todo (igual de antes)
-document.getElementById("saveDay").onclick = () => {
-  const list = plan[currentDay] || [];
-  list.forEach((name) => {
-    const id = key(currentDay, name);
-    const cont = Array.from(document.querySelectorAll("#cards .card")).find(
-      (c) => c.querySelector('input[data-field="exerciseName"]').value === name
-    );
-    if (!cont) return;
-    const load = Number(
-      cont.querySelector('input[data-field="load"]').value || 0
-    );
-    const reps = Number(
-      cont.querySelector('input[data-field="reps"]').value || 0
-    );
-    const sets = Number(
-      cont.querySelector('input[data-field="sets"]').value || 0
-    );
-    const vol = volume(load, reps);
-    if (!state.logs[id]) state.logs[id] = [];
-    state.logs[id].push({
-      date: new Date().toISOString().slice(0, 10),
-      load,
-      reps,
-      sets,
-      volume: vol,
-    });
-    state.prs[id] = Math.max(state.prs[id] || 0, vol);
-  });
-  saveState();
-  setDay(currentDay);
-  alert("Treino salvo!");
-};
-
-// ======= Timer de descanso (igual, reaproveitado) =======
-let timerRef = null;
-let remaining = 0;
-let timerLoop = 0;
-
+// ===== Timer =====
+let timerRef = null,
+  remaining = 0,
+  timerLoop = 0;
 const timerModal = document.getElementById("timerModal");
 const timerExercise = document.getElementById("timerExercise");
 const timerDisplay = document.getElementById("timerDisplay");
@@ -460,12 +466,15 @@ const timerStatus = document.getElementById("timerStatus");
 const timerMin = document.getElementById("timerMin");
 const timerSec = document.getElementById("timerSec");
 const timerLoopSel = document.getElementById("timerLoop");
-const timerStart = document.getElementById("timerStart");
-const timerStop = document.getElementById("timerStop");
-const timerClose = document.getElementById("timerClose");
+document.getElementById("timerStart").addEventListener("click", startTimer);
+document.getElementById("timerStop").addEventListener("click", stopTimer);
+document.getElementById("timerClose").addEventListener("click", closeTimer);
+timerModal.addEventListener("click", (e) => {
+  if (e.target === timerModal) closeTimer();
+});
 
-function openTimer(exerciseName) {
-  timerExercise.textContent = `Exercício: ${exerciseName}`;
+function openTimer(name) {
+  timerExercise.textContent = `Exercício: ${name}`;
   timerStatus.textContent = "Pronto";
   updateTimerDisplay(0);
   timerModal.classList.remove("hidden");
@@ -480,12 +489,9 @@ function startTimer() {
   const mins = Math.max(0, parseInt(timerMin.value || "0", 10));
   const secs = Math.max(0, Math.min(59, parseInt(timerSec.value || "0", 10)));
   timerLoop = parseInt(timerLoopSel.value || "0", 10);
-  remaining = mins * 60 + secs;
-  if (remaining <= 0) {
-    remaining = 60;
-  }
+  remaining = mins * 60 + secs || 60;
   timerStatus.textContent = "Contando...";
-  if (timerRef) clearInterval(timerRef);
+  clearInterval(timerRef);
   updateTimerDisplay(remaining);
   timerRef = setInterval(() => {
     remaining -= 1;
@@ -504,34 +510,28 @@ function startTimer() {
   }, 1000);
 }
 function stopTimer() {
-  if (timerRef) clearInterval(timerRef);
+  clearInterval(timerRef);
   timerRef = null;
   timerStatus.textContent = "Parado";
 }
-function updateTimerDisplay(totalSeconds) {
-  const mm = String(Math.max(0, Math.floor(totalSeconds / 60))).padStart(
-    2,
-    "0"
-  );
-  const ss = String(Math.max(0, totalSeconds % 60)).padStart(2, "0");
+function updateTimerDisplay(total) {
+  const mm = String(Math.max(0, Math.floor(total / 60))).padStart(2, "0");
+  const ss = String(Math.max(0, total % 60)).padStart(2, "0");
   timerDisplay.textContent = `${mm}:${ss}`;
 }
-timerStart.addEventListener("click", startTimer);
-timerStop.addEventListener("click", stopTimer);
-timerClose.addEventListener("click", closeTimer);
-timerModal.addEventListener("click", (e) => {
-  if (e.target === timerModal) closeTimer();
-});
+window.openTimer = openTimer;
+window.resetExercise = resetExercise;
+window.deleteExercise = deleteExercise;
+window.saveExercise = saveExercise;
 
-// ======= Gerenciar dias =======
-const manageDaysBtn = document.getElementById("manageDaysBtn");
+// ===== Gerenciar treinos =====
 const daysModal = document.getElementById("daysModal");
 const daysClose = document.getElementById("daysClose");
-const newDaySelect = document.getElementById("newDaySelect");
+const newDayInput = document.getElementById("newDayInput");
 const addDayBtn = document.getElementById("addDayBtn");
 const daysList = document.getElementById("daysList");
 
-manageDaysBtn.onclick = () => {
+document.getElementById("manageTrainingsBtn").onclick = () => {
   renderDaysList();
   daysModal.classList.remove("hidden");
   daysModal.classList.add("flex");
@@ -545,38 +545,86 @@ daysModal.addEventListener("click", (e) => {
 });
 
 addDayBtn.onclick = () => {
-  const day = newDaySelect.value;
-  if (plan[day]) {
-    alert("Esse dia já existe.");
+  const day = (newDayInput.value || "").trim();
+  if (!day) return;
+  if (plan.days[day]) {
+    alert("Esse treino já existe.");
     return;
   }
-  plan[day] = [];
+  plan.days[day] = [];
+  const order = getDayOrder();
+  order.push(day);
+  plan.__order = order;
   savePlan();
   renderTabs();
   setDay(day);
   renderDaysList();
+  newDayInput.value = "";
 };
-
 function renderDaysList() {
   daysList.innerHTML = "";
-  Object.keys(plan).forEach((d) => {
+  getDayOrder().forEach((d) => {
     const li = document.createElement("li");
     li.className =
-      "flex items-center justify-between glass rounded-xl border border-gray-700 px-3 py-2";
+      "flex items-center justify-between gap-2 glass rounded-xl border border-gray-700 px-3 py-2";
     li.innerHTML = `
-      <span>${d}</span>
-      <button class="px-3 py-1 rounded-lg border border-gray-700 text-gray-300 hover:bg-gray-800">Excluir</button>
+      <input type="text" value="${d}" class="flex-1 rounded-lg bg-[#0b1220] border border-gray-700 px-3 py-2"/>
+      <div class="flex items-center gap-2">
+        <button class="px-3 py-1 rounded-lg glass border border-gray-700 hover:bg-gray-800">Renomear</button>
+        <button class="px-3 py-1 rounded-lg glass border border-gray-700 hover:bg-gray-800">Excluir</button>
+      </div>
     `;
-    const delBtn = li.querySelector("button");
-    delBtn.onclick = () => {
-      const keys = Object.keys(plan);
-      if (keys.length <= 1) {
-        alert("Não é possível excluir o único dia.");
+    const input = li.querySelector("input");
+    const [renameBtn, delBtn] = li.querySelectorAll("button");
+
+    renameBtn.onclick = () => {
+      const newName = (input.value || "").trim();
+      if (!newName || newName === d) return;
+      if (plan.days[newName]) {
+        alert("Já existe um treino com esse nome.");
         return;
       }
-      delete plan[d];
+
+      // migrar plano
+      plan.days[newName] = plan.days[d] || [];
+      delete plan.days[d];
+      plan.__order = getDayOrder().map((x) => (x === d ? newName : x));
+
+      // migrar dados de estado
+      const newLogs = {},
+        newPrs = {};
+      Object.keys(state.logs || {}).forEach((key) => {
+        if (key.startsWith(d + "::"))
+          newLogs[newName + "::" + key.slice(d.length + 2)] = state.logs[key];
+        else newLogs[key] = state.logs[key];
+      });
+      Object.keys(state.prs || {}).forEach((key) => {
+        if (key.startsWith(d + "::"))
+          newPrs[newName + "::" + key.slice(d.length + 2)] = state.prs[key];
+        else newPrs[key] = state.prs[key];
+      });
+      state.logs = newLogs;
+      state.prs = newPrs;
+
       savePlan();
-      // limpa dados relacionados àquele dia
+      saveState();
+      if (currentDay === d) currentDay = newName;
+      renderTabs();
+      setDay(currentDay);
+      renderDaysList();
+    };
+
+    delBtn.onclick = () => {
+      const order = getDayOrder();
+      if (order.length <= 1) {
+        alert("Não é possível excluir o único treino.");
+        return;
+      }
+      if (!confirm(`Excluir o treino "${d}"?`)) return;
+
+      delete plan.days[d];
+      plan.__order = order.filter((x) => x !== d);
+
       Object.keys(state.logs || {}).forEach((k) => {
         if (k.startsWith(d + "::")) delete state.logs[k];
       });
@@ -584,21 +632,20 @@ function renderDaysList() {
         if (k.startsWith(d + "::")) delete state.prs[k];
       });
       saveState();
+      savePlan();
 
-      // se excluiu o dia atual, muda para o primeiro disponível
-      if (currentDay === d) {
-        currentDay = Object.keys(plan)[0];
-      }
+      if (currentDay === d) currentDay = getDayOrder()[0];
       renderTabs();
       setDay(currentDay);
       renderDaysList();
     };
+
     daysList.appendChild(li);
   });
 }
 
-// ======= Ações globais =======
-document.getElementById("resetWeek").onclick = () => {
+// ===== Ações globais =====
+resetBtn.onclick = () => {
   if (
     confirm("Tem certeza que deseja limpar todos os dados (PR e histórico)?")
   ) {
@@ -607,17 +654,193 @@ document.getElementById("resetWeek").onclick = () => {
     setDay(currentDay);
   }
 };
-
-document.getElementById("exportBtn").onclick = (e) => {
-  e.preventDefault();
-  const payload = { state, plan };
-  const blob = new Blob([JSON.stringify(payload, null, 2)], {
-    type: "application/json",
+saveBtn.onclick = () => {
+  const list = plan.days[currentDay] || [];
+  list.forEach((name) => {
+    const id = keyOf(currentDay, name);
+    const card = Array.from(document.querySelectorAll("#cards .card")).find(
+      (c) => c.querySelector('input[data-field="exerciseName"]').value === name
+    );
+    if (!card) return;
+    const load = Number(
+      card.querySelector('input[data-field="load"]').value || 0
+    );
+    const reps = Number(
+      card.querySelector('input[data-field="reps"]').value || 0
+    );
+    const sets = Number(
+      card.querySelector('input[data-field="sets"]').value || 0
+    );
+    const vol = volume(load, reps);
+    if (!state.logs[id]) state.logs[id] = [];
+    state.logs[id].push({
+      date: new Date().toISOString().slice(0, 10),
+      load,
+      reps,
+      sets,
+      volume: vol,
+    });
+    state.prs[id] = Math.max(state.prs[id] || 0, vol);
   });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = "training_day_export.json";
-  a.click();
-  URL.revokeObjectURL(url);
+  saveState();
+  setDay(currentDay);
+  alert("Treino salvo!");
 };
+
+// ===== Exportar treino – seleção + PDF =====
+exportBtn.onclick = () => {
+  // popular select
+  exportSelect.innerHTML = "";
+  getDayOrder().forEach((d) => {
+    const opt = document.createElement("option");
+    opt.value = d;
+    opt.textContent = d;
+    exportSelect.appendChild(opt);
+  });
+  exportSelect.value = currentDay;
+  exportModal.classList.remove("hidden");
+  exportModal.classList.add("flex");
+};
+exportClose.onclick = () => {
+  exportModal.classList.add("hidden");
+  exportModal.classList.remove("flex");
+};
+exportModal.addEventListener("click", (e) => {
+  if (e.target === exportModal) exportClose.click();
+});
+
+exportConfirm.onclick = async () => {
+  const day = exportSelect.value;
+  exportModal.classList.add("hidden");
+  exportModal.classList.remove("flex");
+  await exportTrainingPDF(day);
+};
+
+async function exportTrainingPDF(day) {
+  saveState();
+  savePlan();
+  // construir uma área temporária que clona o layout real (cards com o tema)
+  const shadow = document.createElement("div");
+  shadow.style.position = "fixed";
+  shadow.style.left = "-10000px";
+  shadow.style.top = "0";
+  shadow.style.width = "900px";
+  shadow.className = "print-sheet"; // mantém fundo escuro e tipografia
+
+  const title = document.createElement("div");
+  title.className = "print-title";
+  title.textContent = `Training Day — ${day}`;
+  shadow.appendChild(title);
+
+  // grade igual à visível
+  const grid = document.createElement("section");
+  grid.className =
+    "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6";
+  shadow.appendChild(grid);
+
+  // Renderiza cards do treino selecionado (reutilizando a mesma estrutura)
+  const list = plan.days[day] || [];
+  list.forEach((name) => {
+    const id = keyOf(day, name);
+    const last = lastLog(id);
+    const pr = state.prs[id] || 0;
+    const vol = last ? last.volume : 0;
+    const pct = progressPct(vol, pr);
+
+    const card = document.createElement("div");
+    card.className = "card p-4 rounded-2xl";
+    card.innerHTML = `
+      <div class="flex items-start justify-between gap-2">
+        <div class="flex-1">
+          <label class="text-xs text-gray-400">Exercício</label>
+          <div class="flex items-center gap-2">
+            <span class="text-gray-500">≡</span>
+            <div class="w-full rounded-lg bg-[#0b1220] border border-gray-700 px-3 py-2">${name}</div>
+          </div>
+          <p class="text-[11px] text-gray-500 mt-1">
+            PR: <span>${Math.round(
+              pr
+            )}</span> • Volume atual: <span>${Math.round(vol)}</span>
+          </p>
+        </div>
+        <div class="flex items-center gap-2">
+          <span class="px-2 py-2 rounded-xl glass border border-gray-700">⏱️</span>
+          <span class="px-2 py-2 rounded-xl glass border border-gray-700">🗑️</span>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-3 gap-3 mt-4">
+        <label class="flex flex-col text-sm">
+          <span class="text-gray-400">Carga (kg)</span>
+          <div class="mt-1 rounded-lg bg-[#0b1220] border border-gray-700 px-3 py-2">${
+            last?.load ?? ""
+          }</div>
+        </label>
+        <label class="flex flex-col text-sm">
+          <span class="text-gray-400">Repetições</span>
+          <div class="mt-1 rounded-lg bg-[#0b1220] border border-gray-700 px-3 py-2">${
+            last?.reps ?? ""
+          }</div>
+        </label>
+        <label class="flex flex-col text-sm">
+          <span class="text-gray-400">Séries</span>
+          <div class="mt-1 rounded-lg bg-[#0b1220] border border-gray-700 px-3 py-2">${
+            last?.sets ?? ""
+          }</div>
+        </label>
+      </div>
+
+      <div class="mt-4">
+        <div class="flex items-center justify-between text-xs mb-1 text-gray-400">
+          <span>XP do exercício</span>
+          <span>${pct}%</span>
+        </div>
+        <div class="xpbar"><div class="xpfill" style="width:${pct}%"></div></div>
+        <p class="text-xs text-gray-500 mt-2">Meta: <span>${Math.round(
+          targetFor(pr)
+        )}</span></p>
+      </div>
+
+      <div class="mt-4 flex flex-wrap gap-2 justify-end">
+        <span class="px-3 py-2 rounded-xl glass border border-gray-700">Resetar</span>
+        <span class="px-3 py-2 rounded-2xl btn-primary font-semibold">Salvar</span>
+      </div>
+    `;
+    grid.appendChild(card);
+  });
+
+  document.body.appendChild(shadow);
+
+  // Captura a imagem do shadow
+  const canvas = await html2canvas(shadow, {
+    backgroundColor: "#0b0f1a",
+    scale: 2,
+  });
+  const imgData = canvas.toDataURL("image/png");
+
+  // Monta PDF A4 (retrato) ajustando para caber
+  const pdf = new jsPDF("p", "mm", "a4");
+  const pageW = 210,
+    pageH = 297,
+    margin = 8;
+  const pxToMm = (px) => (px / 96) * 25.4;
+  const imgWmm = pxToMm(canvas.width);
+  const imgHmm = pxToMm(canvas.height);
+  const maxW = pageW - margin * 2,
+    maxH = pageH - margin * 2;
+  const ratio = Math.min(maxW / imgWmm, maxH / imgHmm);
+  const w = imgWmm * ratio,
+    h = imgHmm * ratio;
+  const x = (pageW - w) / 2,
+    y = (pageH - h) / 2;
+
+  pdf.addImage(imgData, "PNG", x, y, w, h, undefined, "FAST");
+  pdf.save(`training_day_${day.replace(/\s+/g, "_").toLowerCase()}.pdf`);
+
+  // limpa
+  document.body.removeChild(shadow);
+}
+
+// ===== Inicialização =====
+renderTabs();
+setDay(currentDay);

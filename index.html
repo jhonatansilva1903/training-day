@@ -2,11 +2,15 @@
 <html lang="pt-br">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Training Day — 3 Dias</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Training Day — Treinos</title>
     <meta name="theme-color" content="#0b0f1a" />
-    <!-- Tailwind CDN -->
+    <!-- Tailwind -->
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- PDF deps -->
+    <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+
     <style>
       :root {
         --bg: #0b0f1a;
@@ -17,12 +21,12 @@
         --title: #f3f4f6;
         --c1: #22d3ee;
         --c2: #a78bfa;
-        --ok: #34d399;
-        --warn: #f59e0b;
         --radius: 16px;
         --gap: 16px;
         --glow: 0 0 20px rgba(167, 139, 250, 0.35),
           0 0 40px rgba(34, 211, 238, 0.25);
+        --danger1: #fb7185;
+        --danger2: #ef4444;
       }
       body {
         background: radial-gradient(
@@ -42,7 +46,7 @@
         background: linear-gradient(
           180deg,
           rgba(17, 24, 39, 0.9),
-          rgba(17, 24, 39, 0.8)
+          rgba(17, 24, 39, 0.82)
         );
         border: 1px solid var(--line);
         border-radius: var(--radius);
@@ -63,6 +67,15 @@
       }
       .btn-primary:hover {
         filter: brightness(1.07);
+      }
+      .btn-danger {
+        background: linear-gradient(90deg, var(--danger1), var(--danger2));
+        color: #0b0f1a;
+        box-shadow: 0 0 18px rgba(239, 68, 68, 0.35),
+          0 0 34px rgba(251, 113, 133, 0.25);
+      }
+      .btn-danger:hover {
+        filter: brightness(1.06);
       }
       .xpbar {
         height: 10px;
@@ -101,17 +114,41 @@
         margin: 0;
       }
       input[type="number"] {
-        -moz-appearance: textfield;
         appearance: textfield;
+        -moz-appearance: textfield;
       }
       .modal-backdrop {
         background: rgba(0, 0, 0, 0.6);
+      }
+
+      /* DnD efeitos visuais */
+      .dragging {
+        opacity: 0.6;
+      }
+      .drop-target {
+        outline: 2px dashed rgba(167, 139, 250, 0.65);
+        outline-offset: 4px;
+      }
+
+      /* Área de exportação (clonamos o layout real; estas classes servem só se precisar fallback) */
+      .print-sheet {
+        width: 794px;
+        min-height: 1123px;
+        background: #0b0f1a;
+        color: #e5e7eb;
+        padding: 24px;
+      }
+      .print-title {
+        font: 700 20px/1.2 system-ui, -apple-system, Segoe UI, Roboto,
+          sans-serif;
+        margin-bottom: 12px;
+        text-align: center;
       }
     </style>
   </head>
   <body class="min-h-screen">
     <header class="max-w-5xl mx-auto p-4 md:p-6">
-      <div class="flex items-center justify-between gap-4">
+      <div class="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 class="text-3xl md:text-4xl font-black title-gradient">
             Training Day
@@ -120,40 +157,40 @@
             Treino para iniciantes com progressão de xp
           </p>
         </div>
-        <div class="flex items-center gap-2">
+        <div class="flex flex-wrap items-center gap-2">
           <button
-            id="manageDaysBtn"
-            class="px-3 py-2 rounded-xl border border-gray-700 text-gray-300 hover:bg-gray-800"
+            id="manageTrainingsBtn"
+            class="px-3 py-2 rounded-xl btn-primary font-semibold"
           >
-            Gerenciar dias
+            Gerenciar treinos
+          </button>
+          <button
+            id="exportPdfBtn"
+            class="px-3 py-2 rounded-xl btn-primary font-semibold"
+          >
+            Exportar treino
           </button>
           <button
             id="resetWeek"
-            class="px-3 py-2 rounded-xl border border-gray-700 text-gray-300 hover:bg-gray-800"
+            class="px-3 py-2 rounded-xl btn-danger font-semibold"
           >
             Resetar
           </button>
-          <a
-            href="#"
-            id="exportBtn"
-            class="px-3 py-2 rounded-xl btn-primary font-semibold"
-            >Exportar</a
-          >
         </div>
       </div>
     </header>
 
-    <main class="max-w-5xl mx-auto px-4 md:px-6 pb-12">
-      <!-- Tabs -->
-      <nav
-        class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-7 gap-2 mb-6"
-      ></nav>
+    <main class="max-w-5xl mx-auto px-4 md:px-6 pb-16">
+      <!-- Tabs (treinos/dias) -->
+      <nav id="daysTabs" class="flex flex-wrap gap-2 mb-6"></nav>
 
-      <!-- Day Summary -->
+      <!-- Resumo do treino -->
       <section class="card p-4 md:p-6 mb-6">
         <div class="flex items-start justify-between gap-4">
           <div>
-            <h2 id="dayTitle" class="text-xl md:text-2xl font-bold">Segunda</h2>
+            <h2 id="dayTitle" class="text-xl md:text-2xl font-bold">
+              Treino 1
+            </h2>
             <p class="text-sm text-gray-400">
               Progresso = volume (carga × reps) vs PR salvo. PR sobe
               automaticamente quando você supera o volume anterior.
@@ -169,7 +206,7 @@
           <div
             class="flex items-center justify-between text-xs mb-1 text-gray-400"
           >
-            <span>XP total do dia</span>
+            <span>XP total do treino</span>
             <span id="dayXPLabel">0%</span>
           </div>
           <div class="xpbar"><div id="dayXP" class="xpfill w-0"></div></div>
@@ -179,16 +216,17 @@
       <div class="mb-4 flex justify-between items-center">
         <button
           id="addExerciseBtn"
-          class="px-3 py-2 rounded-xl border border-gray-700 text-gray-300 hover:bg-gray-800"
+          class="px-3 py-2 rounded-xl glass border border-gray-700 hover:bg-gray-800"
         >
           + Adicionar exercício
         </button>
         <small class="text-gray-500"
-          >Dica: o nome é uma <b>combobox</b> com sugestões e texto
-          livre.</small
+          >Dica: nome do exercício é uma <b>combobox</b> com sugestões e texto
+          livre. Arraste para reordenar.</small
         >
       </div>
 
+      <!-- Cards (exercícios) -->
       <section
         id="cards"
         class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6"
@@ -204,12 +242,12 @@
       </div>
     </main>
 
-    <!-- Modal Timer (reutilizável) -->
+    <!-- Modal Timer -->
     <div
       id="timerModal"
       class="fixed inset-0 hidden items-center justify-center modal-backdrop z-50"
     >
-      <div class="card p-6 rounded-2xl w-[90%] max-w-md">
+      <div class="card p-6 rounded-2xl w-[92%] max-w-md">
         <div class="flex items-start justify-between">
           <h3 class="text-lg font-semibold">Timer de descanso</h3>
           <button id="timerClose" class="text-gray-400 hover:text-gray-200">
@@ -260,7 +298,7 @@
         <div class="mt-4 flex gap-2 justify-end">
           <button
             id="timerStop"
-            class="px-3 py-2 rounded-xl border border-gray-700 text-gray-300 hover:bg-gray-800"
+            class="px-3 py-2 rounded-xl glass border border-gray-700 hover:bg-gray-800"
           >
             Parar
           </button>
@@ -274,34 +312,27 @@
       </div>
     </div>
 
-    <!-- Modal Gerenciar Dias -->
+    <!-- Modal Gerenciar Treinos -->
     <div
       id="daysModal"
       class="fixed inset-0 hidden items-center justify-center modal-backdrop z-50"
     >
-      <div class="card p-6 rounded-2xl w-[90%] max-w-lg">
+      <div class="card p-6 rounded-2xl w-[92%] max-w-lg">
         <div class="flex items-start justify-between">
-          <h3 class="text-lg font-semibold">Gerenciar dias</h3>
+          <h3 class="text-lg font-semibold">Gerenciar treinos</h3>
           <button id="daysClose" class="text-gray-400 hover:text-gray-200">
             ✕
           </button>
         </div>
 
         <div class="mt-4">
-          <label class="text-sm text-gray-400">Adicionar dia da semana</label>
+          <label class="text-sm text-gray-400">Adicionar treino</label>
           <div class="mt-1 flex gap-2">
-            <select
-              id="newDaySelect"
-              class="rounded-lg bg-[#0b1220] border border-gray-700 px-3 py-2"
-            >
-              <option>Segunda</option>
-              <option>Terça</option>
-              <option>Quarta</option>
-              <option>Quinta</option>
-              <option>Sexta</option>
-              <option>Sábado</option>
-              <option>Domingo</option>
-            </select>
+            <input
+              id="newDayInput"
+              placeholder="Ex.: Treino 2, Treino B, Quarta..."
+              class="flex-1 rounded-lg bg-[#0b1220] border border-gray-700 px-3 py-2"
+            />
             <button
               id="addDayBtn"
               class="px-3 py-2 rounded-xl btn-primary font-semibold"
@@ -312,42 +343,55 @@
         </div>
 
         <div class="mt-6">
-          <p class="text-sm text-gray-400 mb-2">Dias atuais</p>
+          <p class="text-sm text-gray-400 mb-2">
+            Treinos atuais (arraste as abas para reordenar, renomeie abaixo)
+          </p>
           <ul id="daysList" class="space-y-2"></ul>
-          <small class="text-gray-500"
-            >Dica: você pode excluir o dia atual (exceto se for o único).</small
+          <small class="text-gray-500 block mt-2"
+            >Dica: renomeie para “Treino 1/2/3” ou “Treino A/B/C”.</small
           >
         </div>
       </div>
     </div>
 
-    <!-- Datalist global com exercícios comuns -->
+    <!-- Modal Selecionar Treino para Exportar -->
+    <div
+      id="exportModal"
+      class="fixed inset-0 hidden items-center justify-center modal-backdrop z-50"
+    >
+      <div class="card p-6 rounded-2xl w-[92%] max-w-md">
+        <div class="flex items-start justify-between">
+          <h3 class="text-lg font-semibold">Exportar treino</h3>
+          <button id="exportClose" class="text-gray-400 hover:text-gray-200">
+            ✕
+          </button>
+        </div>
+        <p class="text-sm text-gray-400 mt-1">
+          Escolha qual treino você quer exportar em PDF.
+        </p>
+
+        <div class="mt-4 flex gap-2">
+          <select
+            id="exportSelect"
+            class="flex-1 rounded-lg bg-[#0b1220] border border-gray-700 px-3 py-2"
+          ></select>
+          <button
+            id="exportConfirm"
+            class="px-3 py-2 rounded-xl btn-primary font-semibold"
+          >
+            Gerar PDF
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Sugestões globais para combobox -->
     <datalist id="exerciseOptions"></datalist>
 
+    <!-- Plano padrão: apenas 1 treino com 1 card -->
     <script>
-      /* SEMENTE padrão (continua igual) */
       window.__SEED__ = {
-        Segunda: [
-          "Desenvolvimento halteres",
-          "Elevação Lateral",
-          "Overhead triceps",
-          "Cable Curl",
-          "Abs Cable Crunch",
-        ],
-        Quarta: [
-          "Hack squat",
-          "Stiff com halteres",
-          "Mesa flexora",
-          "Cadeira extensora",
-          "Panturrilha em pé",
-        ],
-        Sexta: [
-          "Remada curvada",
-          "Puxador alto",
-          "Bar cable row",
-          "Reverse grip pull down",
-          "Rosca alternada",
-        ],
+        "Treino 1": ["Novo exercício"],
       };
     </script>
     <script src="script.js"></script>
