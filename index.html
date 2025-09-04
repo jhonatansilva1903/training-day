@@ -101,10 +101,9 @@
         margin: 0;
       }
       input[type="number"] {
-        appearance: textfield;
         -moz-appearance: textfield;
+        appearance: textfield;
       }
-      /* Modal (timer) */
       .modal-backdrop {
         background: rgba(0, 0, 0, 0.6);
       }
@@ -123,6 +122,12 @@
         </div>
         <div class="flex items-center gap-2">
           <button
+            id="manageDaysBtn"
+            class="px-3 py-2 rounded-xl border border-gray-700 text-gray-300 hover:bg-gray-800"
+          >
+            Gerenciar dias
+          </button>
+          <button
             id="resetWeek"
             class="px-3 py-2 rounded-xl border border-gray-700 text-gray-300 hover:bg-gray-800"
           >
@@ -140,7 +145,9 @@
 
     <main class="max-w-5xl mx-auto px-4 md:px-6 pb-12">
       <!-- Tabs -->
-      <nav class="grid grid-cols-3 gap-2 mb-6"></nav>
+      <nav
+        class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-7 gap-2 mb-6"
+      ></nav>
 
       <!-- Day Summary -->
       <section class="card p-4 md:p-6 mb-6">
@@ -168,6 +175,19 @@
           <div class="xpbar"><div id="dayXP" class="xpfill w-0"></div></div>
         </div>
       </section>
+
+      <div class="mb-4 flex justify-between items-center">
+        <button
+          id="addExerciseBtn"
+          class="px-3 py-2 rounded-xl border border-gray-700 text-gray-300 hover:bg-gray-800"
+        >
+          + Adicionar exercício
+        </button>
+        <small class="text-gray-500"
+          >Dica: o nome é uma <b>combobox</b> com sugestões e texto
+          livre.</small
+        >
+      </div>
 
       <section
         id="cards"
@@ -254,8 +274,58 @@
       </div>
     </div>
 
+    <!-- Modal Gerenciar Dias -->
+    <div
+      id="daysModal"
+      class="fixed inset-0 hidden items-center justify-center modal-backdrop z-50"
+    >
+      <div class="card p-6 rounded-2xl w-[90%] max-w-lg">
+        <div class="flex items-start justify-between">
+          <h3 class="text-lg font-semibold">Gerenciar dias</h3>
+          <button id="daysClose" class="text-gray-400 hover:text-gray-200">
+            ✕
+          </button>
+        </div>
+
+        <div class="mt-4">
+          <label class="text-sm text-gray-400">Adicionar dia da semana</label>
+          <div class="mt-1 flex gap-2">
+            <select
+              id="newDaySelect"
+              class="rounded-lg bg-[#0b1220] border border-gray-700 px-3 py-2"
+            >
+              <option>Segunda</option>
+              <option>Terça</option>
+              <option>Quarta</option>
+              <option>Quinta</option>
+              <option>Sexta</option>
+              <option>Sábado</option>
+              <option>Domingo</option>
+            </select>
+            <button
+              id="addDayBtn"
+              class="px-3 py-2 rounded-xl btn-primary font-semibold"
+            >
+              Adicionar
+            </button>
+          </div>
+        </div>
+
+        <div class="mt-6">
+          <p class="text-sm text-gray-400 mb-2">Dias atuais</p>
+          <ul id="daysList" class="space-y-2"></ul>
+          <small class="text-gray-500"
+            >Dica: você pode excluir o dia atual (exceto se for o único).</small
+          >
+        </div>
+      </div>
+    </div>
+
+    <!-- Datalist global com exercícios comuns -->
+    <datalist id="exerciseOptions"></datalist>
+
     <script>
-      /* SEMENTE: 5 exercícios por dia */
+      /* SEMENTE padrão (continua igual) */
       window.__SEED__ = {
         Segunda: [
           "Desenvolvimento halteres",
