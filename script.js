@@ -1,4 +1,5 @@
 // Training Day — 3 Dias (Segunda, Quarta, Sexta)
+// Adições: campo "Séries" + modal de Timer de descanso
 const SEED = window.__SEED__;
 const DAYS = ["Segunda", "Quarta", "Sexta"];
 const STORAGE_KEY = "training_day_v1";
@@ -6,6 +7,7 @@ const STORAGE_KEY = "training_day_v1";
 let state = loadState();
 let currentDay = DAYS[0];
 
+// ======= Estado & helpers =======
 function loadState() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -28,7 +30,7 @@ const progressPct = (vol, pr) => {
   return Math.min(100, Math.round((vol / target) * 100));
 };
 
-// UI inicial
+// ======= UI inicial =======
 const nav = document.querySelector("nav");
 DAYS.forEach((d) => {
   const btn = document.createElement("button");
@@ -61,6 +63,7 @@ function lastLog(id) {
   return logs.length ? logs[logs.length - 1] : null;
 }
 
+// ======= Render =======
 function renderCards(day) {
   const cont = document.getElementById("cards");
   cont.innerHTML = "";
@@ -89,16 +92,28 @@ function renderCards(day) {
         <span class="badge px-2 py-1 rounded-md text-[10px] uppercase tracking-wide">${day}</span>
       </div>
 
-      <div class="grid grid-cols-2 gap-3 mt-4">
+      <!-- AQUI: grid passou a 3 colunas para incluir "Séries" -->
+      <div class="grid grid-cols-3 gap-3 mt-4">
         <label class="flex flex-col text-sm">
           <span class="text-gray-400">Carga (kg)</span>
           <input type="number" step="0.5" min="0" class="mt-1 rounded-lg bg-[#0b1220] border border-gray-700 px-3 py-2"
-            value="${last ? last.load : ""}" data-id="${id}" data-field="load"/>
+            value="${
+              last ? last.load ?? "" : ""
+            }" data-id="${id}" data-field="load"/>
         </label>
         <label class="flex flex-col text-sm">
           <span class="text-gray-400">Repetições</span>
           <input type="number" step="1" min="0" class="mt-1 rounded-lg bg-[#0b1220] border border-gray-700 px-3 py-2"
-            value="${last ? last.reps : ""}" data-id="${id}" data-field="reps"/>
+            value="${
+              last ? last.reps ?? "" : ""
+            }" data-id="${id}" data-field="reps"/>
+        </label>
+        <label class="flex flex-col text-sm">
+          <span class="text-gray-400">Séries</span>
+          <input type="number" step="1" min="0" class="mt-1 rounded-lg bg-[#0b1220] border border-gray-700 px-3 py-2"
+            value="${
+              last ? last.sets ?? "" : ""
+            }" data-id="${id}" data-field="sets"/>
         </label>
       </div>
 
@@ -115,9 +130,10 @@ function renderCards(day) {
     )}</span></p>
       </div>
 
-      <div class="mt-4 flex gap-2 justify-end">
+      <div class="mt-4 flex flex-wrap gap-2 justify-end">
+        <button class="px-3 py-2 rounded-xl border border-gray-700 text-gray-300 hover:bg-gray-800" onclick="openTimer('${name}')">⏱️ Timer</button>
         <button class="px-3 py-2 rounded-xl border border-gray-700 text-gray-300 hover:bg-gray-800" onclick="resetExercise('${id}')">Resetar</button>
-        <button class="px-3 py-2 rounded-xl btn-primary font-semibold" onclick="saveExercise('${id}','${name}','${day}')">Salvar</button>
+        <button class="px-3 py-2 rounded-2xl btn-primary font-semibold" onclick="saveExercise('${id}','${name}','${day}')">Salvar</button>
       </div>
     `;
     cont.appendChild(card);
@@ -128,6 +144,7 @@ function renderCards(day) {
     .forEach((inp) => inp.addEventListener("input", onLiveChange));
 }
 
+// ======= Live change (não muda XP pela série) =======
 function onLiveChange(e) {
   const id = e.target.dataset.id;
   const card = e.target.closest(".card");
@@ -153,6 +170,7 @@ function onLiveChange(e) {
   updateDayXP();
 }
 
+// ======= Persistência =======
 function saveExercise(id, name, day) {
   const card = Array.from(document.querySelectorAll(".card")).find(
     (c) => c.querySelector("h3")?.textContent === name
@@ -164,13 +182,17 @@ function saveExercise(id, name, day) {
   const reps = Number(
     card.querySelector('input[data-field="reps"]').value || 0
   );
-  const vol = volume(load, reps);
+  const sets = Number(
+    card.querySelector('input[data-field="sets"]').value || 0
+  );
+  const vol = volume(load, reps); // XP continua baseado em carga × reps
 
   if (!state.logs[id]) state.logs[id] = [];
   state.logs[id].push({
     date: new Date().toISOString().slice(0, 10),
     load,
     reps,
+    sets,
     volume: vol,
   });
 
@@ -212,7 +234,7 @@ function updateDayXP() {
   document.getElementById("dayXPLabel").textContent = avg + "%";
 }
 
-// Salvar o dia todo
+// Salvar dia todo
 document.getElementById("saveDay").onclick = () => {
   const list = SEED[currentDay] || [];
   list.forEach((name) => {
@@ -227,12 +249,16 @@ document.getElementById("saveDay").onclick = () => {
     const reps = Number(
       cont.querySelector('input[data-field="reps"]').value || 0
     );
+    const sets = Number(
+      cont.querySelector('input[data-field="sets"]').value || 0
+    );
     const vol = volume(load, reps);
     if (!state.logs[id]) state.logs[id] = [];
     state.logs[id].push({
       date: new Date().toISOString().slice(0, 10),
       load,
       reps,
+      sets,
       volume: vol,
     });
     state.prs[id] = Math.max(state.prs[id] || 0, vol);
@@ -242,7 +268,87 @@ document.getElementById("saveDay").onclick = () => {
   alert("Treino salvo!");
 };
 
-// Ações globais
+// ======= Timer de descanso (modal) =======
+let timerRef = null;
+let remaining = 0;
+let timerLoop = 0;
+
+const timerModal = document.getElementById("timerModal");
+const timerExercise = document.getElementById("timerExercise");
+const timerDisplay = document.getElementById("timerDisplay");
+const timerStatus = document.getElementById("timerStatus");
+const timerMin = document.getElementById("timerMin");
+const timerSec = document.getElementById("timerSec");
+const timerLoopSel = document.getElementById("timerLoop");
+const timerStart = document.getElementById("timerStart");
+const timerStop = document.getElementById("timerStop");
+const timerClose = document.getElementById("timerClose");
+
+function openTimer(exerciseName) {
+  timerExercise.textContent = `Exercício: ${exerciseName}`;
+  timerStatus.textContent = "Pronto";
+  updateTimerDisplay(0);
+  timerModal.classList.remove("hidden");
+  timerModal.classList.add("flex");
+}
+function closeTimer() {
+  stopTimer();
+  timerModal.classList.add("hidden");
+  timerModal.classList.remove("flex");
+}
+function startTimer() {
+  const mins = Math.max(0, parseInt(timerMin.value || "0", 10));
+  const secs = Math.max(0, Math.min(59, parseInt(timerSec.value || "0", 10)));
+  timerLoop = parseInt(timerLoopSel.value || "0", 10);
+  remaining = mins * 60 + secs;
+  if (remaining <= 0) {
+    remaining = 60;
+  } // default 1 min se 0
+  timerStatus.textContent = "Contando...";
+  if (timerRef) clearInterval(timerRef);
+  updateTimerDisplay(remaining);
+  timerRef = setInterval(() => {
+    remaining -= 1;
+    updateTimerDisplay(remaining);
+    if (remaining <= 0) {
+      clearInterval(timerRef);
+      timerRef = null;
+      timerStatus.textContent = timerLoop
+        ? "Ciclo concluído — reiniciando"
+        : "Concluído!";
+      try {
+        new AudioContext();
+      } catch (_) {}
+      // sinal simples
+      alert("Descanso finalizado!");
+      if (timerLoop) {
+        startTimer(); // reinicia com os mesmos valores
+      }
+    }
+  }, 1000);
+}
+function stopTimer() {
+  if (timerRef) clearInterval(timerRef);
+  timerRef = null;
+  timerStatus.textContent = "Parado";
+}
+function updateTimerDisplay(totalSeconds) {
+  const mm = String(Math.max(0, Math.floor(totalSeconds / 60))).padStart(
+    2,
+    "0"
+  );
+  const ss = String(Math.max(0, totalSeconds % 60)).padStart(2, "0");
+  timerDisplay.textContent = `${mm}:${ss}`;
+}
+
+timerStart.addEventListener("click", startTimer);
+timerStop.addEventListener("click", stopTimer);
+timerClose.addEventListener("click", closeTimer);
+timerModal.addEventListener("click", (e) => {
+  if (e.target === timerModal) closeTimer();
+});
+
+// ======= Ações globais =======
 document.getElementById("resetWeek").onclick = () => {
   if (confirm("Tem certeza que deseja limpar todos os dados?")) {
     state = { logs: {}, prs: {} };

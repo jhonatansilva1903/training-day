@@ -101,8 +101,11 @@
         margin: 0;
       }
       input[type="number"] {
-        appearance: textfield;
         -moz-appearance: textfield;
+      }
+      /* Modal (timer) */
+      .modal-backdrop {
+        background: rgba(0, 0, 0, 0.6);
       }
     </style>
   </head>
@@ -179,6 +182,76 @@
         </button>
       </div>
     </main>
+
+    <!-- Modal Timer (reutilizável) -->
+    <div
+      id="timerModal"
+      class="fixed inset-0 hidden items-center justify-center modal-backdrop z-50"
+    >
+      <div class="card p-6 rounded-2xl w-[90%] max-w-md">
+        <div class="flex items-start justify-between">
+          <h3 class="text-lg font-semibold">Timer de descanso</h3>
+          <button id="timerClose" class="text-gray-400 hover:text-gray-200">
+            ✕
+          </button>
+        </div>
+        <p id="timerExercise" class="text-sm text-gray-400 mt-1"></p>
+
+        <div class="grid grid-cols-3 gap-3 mt-4">
+          <label class="flex flex-col text-sm">
+            <span class="text-gray-400">Min</span>
+            <input
+              id="timerMin"
+              type="number"
+              min="0"
+              value="1"
+              class="mt-1 rounded-lg bg-[#0b1220] border border-gray-700 px-3 py-2"
+            />
+          </label>
+          <label class="flex flex-col text-sm">
+            <span class="text-gray-400">Seg</span>
+            <input
+              id="timerSec"
+              type="number"
+              min="0"
+              max="59"
+              value="0"
+              class="mt-1 rounded-lg bg-[#0b1220] border border-gray-700 px-3 py-2"
+            />
+          </label>
+          <label class="flex flex-col text-sm">
+            <span class="text-gray-400">Auto loop</span>
+            <select
+              id="timerLoop"
+              class="mt-1 rounded-lg bg-[#0b1220] border border-gray-700 px-3 py-2"
+            >
+              <option value="0" selected>Não</option>
+              <option value="1">Sim</option>
+            </select>
+          </label>
+        </div>
+
+        <div class="mt-4 p-3 rounded-xl glass text-center">
+          <div class="text-3xl font-bold" id="timerDisplay">00:00</div>
+          <div class="text-xs text-gray-400" id="timerStatus">Pronto</div>
+        </div>
+
+        <div class="mt-4 flex gap-2 justify-end">
+          <button
+            id="timerStop"
+            class="px-3 py-2 rounded-xl border border-gray-700 text-gray-300 hover:bg-gray-800"
+          >
+            Parar
+          </button>
+          <button
+            id="timerStart"
+            class="px-3 py-2 rounded-xl btn-primary font-semibold"
+          >
+            Iniciar
+          </button>
+        </div>
+      </div>
+    </div>
 
     <script>
       /* SEMENTE: 5 exercícios por dia */
