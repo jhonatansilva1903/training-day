@@ -1,0 +1,131 @@
+/* ===== Tokens ===== */
+:root {
+  --bg: #0b0f1a;
+  --panel: #111827;
+  --muted: #9ca3af;
+  --line: #1f2937;
+  --text: #e5e7eb;
+  --title: #f3f4f6;
+  --c1: #22d3ee;
+  --c2: #a78bfa;
+  --radius: 16px;
+  --gap: 16px;
+  --glow: 0 0 20px rgba(167, 139, 250, 0.35),
+          0 0 40px rgba(34, 211, 238, 0.25);
+  --danger1: #fb7185;
+  --danger2: #ef4444;
+}
+
+/* ===== Base ===== */
+body {
+  background:
+    radial-gradient(1200px 800px at 80% -10%, rgba(167,139,250,.08), transparent 60%),
+    radial-gradient(800px 600px at 10% 10%, rgba(34,211,238,.06), transparent 60%),
+    var(--bg);
+  color: var(--text);
+}
+
+/* evita overflow nas abas em telas pequenas */
+#daysTabs { overflow-x: auto; }
+
+/* ===== Cards / UI ===== */
+.card {
+  background: linear-gradient(180deg, rgba(17,24,39,.9), rgba(17,24,39,.82));
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 20px rgba(0,0,0,.25);
+}
+
+/* linha do topo do card quebra em telas pequenas */
+.card > .flex.items-start.justify-between { flex-wrap: wrap; }
+
+/* impede inputs de estourarem largura no mobile */
+.min-w-0 { min-width: 0; }
+
+.badge {
+  background: linear-gradient(90deg, rgba(34,211,238,.15), rgba(167,139,250,.15));
+  border: 1px solid rgba(167,139,250,.25);
+}
+
+.btn-primary {
+  background: linear-gradient(90deg, var(--c1), var(--c2));
+  color: #0b0f1a;
+  box-shadow: var(--glow);
+}
+.btn-primary:hover { filter: brightness(1.07); }
+
+.btn-danger {
+  background: linear-gradient(90deg, var(--danger1), var(--danger2));
+  color: #0b0f1a;
+  box-shadow: 0 0 18px rgba(239,68,68,.35), 0 0 34px rgba(251,113,133,.25);
+}
+.btn-danger:hover { filter: brightness(1.06); }
+
+.xpbar {
+  height: 10px;
+  background: #0f172a;
+  border: 1px solid #1f2937;
+  border-radius: 999px;
+  overflow: hidden;
+}
+.xpfill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--c1), var(--c2));
+  box-shadow: var(--glow);
+  transition: width 300ms ease;
+}
+
+.tab-active {
+  background: linear-gradient(90deg, rgba(34,211,238,.15), rgba(167,139,250,.15));
+  border-color: rgba(167,139,250,.35);
+}
+
+.glass {
+  background: rgba(255,255,255,.02);
+  border: 1px solid rgba(255,255,255,.06);
+}
+
+.title-gradient {
+  background: linear-gradient(90deg, #e5e7eb, #a78bfa);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* Inputs numéricos sem setas */
+input::-webkit-outer-spin-button,
+input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+input[type="number"] { appearance: textfield; -moz-appearance: textfield; }
+
+/* Modal */
+.modal-backdrop { background: rgba(0,0,0,.6); }
+
+/* DnD efeitos visuais */
+.dragging { opacity: .6; }
+.drop-target { outline: 2px dashed rgba(167,139,250,.65); outline-offset: 4px; }
+
+/* PDF fallback area */
+.print-sheet {
+  width: 794px;
+  min-height: 1123px;
+  background: #0b0f1a;
+  color: #e5e7eb;
+  padding: 24px;
+}
+.print-title {
+  font: 700 20px/1.2 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  margin-bottom: 12px;
+  text-align: center;
+}
+
+/* ===== Mobile refinements ===== */
+/* Evita sobreposição dos 3 campos (carga/reps/séries) em telas muito estreitas */
+@media (max-width: 360px) {
+  .card .grid.grid-cols-3 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+/* Melhora respiro do topo em telas mínimas */
+@media (max-width: 340px) {
+  header .flex { gap: 8px; }
+  #daysTabs { gap: 6px; }
+}
