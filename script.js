@@ -19,7 +19,30 @@
   }
 
   // ===== Constantes =====
-  const SEED = window.__SEED__ || { "Treino 1": ["Novo exercício"] };
+  const SEED =
+    window.__SEED__ || {
+      "Treino A": [
+        "Supino reto barra",
+        "Supino inclinado halteres",
+        "Desenvolvimento halteres",
+        "Elevação lateral",
+        "Tríceps corda (pushdown)",
+      ],
+      "Treino B": [
+        "Puxada frente barra",
+        "Remada curvada",
+        "Remada baixa",
+        "Rosca direta barra",
+        "Rosca alternada",
+      ],
+      "Treino C": [
+        "Agachamento livre",
+        "Leg press",
+        "Mesa flexora",
+        "Panturrilha em pé",
+        "Abdominal crunch",
+      ],
+    };
   const STORAGE_KEY = "training_day_state_v1";
   const PLAN_KEY = "training_day_plan_v3";
 
@@ -148,7 +171,7 @@
   const exportSelect = document.getElementById("exportSelect");
   const exportConfirm = document.getElementById("exportConfirm");
 
-  let currentDay = getDayOrder()[0] || "Treino 1";
+  let currentDay = getDayOrder()[0] || "Treino A";
 
   // ===== Abas (DnD) =====
   function renderTabs() {
