@@ -1,0 +1,17 @@
+{
+  "name": "training-day",
+  "version": "1.0.0",
+  "description": "Workout planner with default beginner templates",
+  "main": "script.js",
+  "scripts": {
+    "test": "node --check script.js",
+    "start": "live-server ."
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "devDependencies": {
+    "live-server": "^1.2.2"
+  }
+}
