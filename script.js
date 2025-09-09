@@ -172,6 +172,7 @@
   const exportConfirm = document.getElementById("exportConfirm");
 
   let currentDay = getDayOrder()[0] || "Treino A";
+  let editingCardId = null;
 
   // ===== Abas (DnD) =====
   function renderTabs() {
@@ -221,6 +222,7 @@
   // ===== Render treino atual =====
   function setDay(day) {
     currentDay = day;
+    editingCardId = null;
     document.getElementById("dayTitle").textContent = day;
     document.querySelectorAll("#daysTabs button").forEach((b) => {
       if (b.dataset.day === day) b.classList.add("tab-active");
@@ -256,7 +258,9 @@
       card.addEventListener("dragleave", () => card.classList.remove("drop-target"));
       card.addEventListener("dragend", () => card.classList.remove("drop-target", "dragging"));
 
-      card.innerHTML = `
+      const isEditing = editingCardId === id;
+      if (isEditing) {
+        card.innerHTML = `
         <div class="flex items-start justify-between gap-2">
           <div class="flex-1 min-w-0">
             <label class="text-xs text-gray-400">Exercício</label>
@@ -271,8 +275,8 @@
             </p>
           </div>
           <div class="flex items-center gap-2">
-            <button title="Timer" class="px-2 py-2 rounded-xl glass border border-gray-700 hover:bg-gray-800" onclick="openTimer('${name}')">⏱️</button>
-            <button title="Excluir" class="px-2 py-2 rounded-xl glass border border-gray-700 hover:bg-gray-800" onclick="deleteExercise('${day}','${name}')">🗑️</button>
+            <button title="Timer" class="px-2 py-2 rounded-xl btn-primary" onclick="openTimer('${name}')">⏱️</button>
+            <button title="Excluir" class="px-2 py-2 rounded-xl btn-danger" onclick="deleteExercise('${day}','${name}')">🗑️</button>
           </div>
         </div>
 
@@ -304,10 +308,44 @@
         </div>
 
         <div class="mt-4 flex flex-wrap gap-2 justify-end">
+          <button class="px-3 py-2 rounded-xl glass border border-gray-700 hover:bg-gray-800" onclick="cancelEdit()">Cancelar</button>
           <button class="px-3 py-2 rounded-xl glass border border-gray-700 hover:bg-gray-800" onclick="resetExercise('${id}')">Resetar</button>
           <button class="px-3 py-2 rounded-2xl btn-primary font-semibold" onclick="saveExercise('${id}', this)">Salvar</button>
         </div>
       `;
+      } else {
+        card.innerHTML = `
+        <div class="flex items-start justify-between gap-2">
+          <div class="flex-1 min-w-0">
+            <div class="flex items-center gap-2">
+              <span class="cursor-grab select-none text-gray-500" title="Arraste para mover">≡</span>
+              <span class="font-semibold">${name}</span>
+            </div>
+            <p class="text-[11px] text-gray-500 mt-1">
+              PR: <span data-pr="value">${Math.round(pr)}</span> • Volume atual:
+              <span data-vol="value">${Math.round(vol)}</span>
+            </p>
+            <p class="text-sm text-gray-300 mt-2">
+              ${last ? `${last.load || 0} kg • ${last.reps || 0} reps • ${last.sets || 0} séries` : "Sem dados"}
+            </p>
+          </div>
+          <div class="flex items-center gap-1">
+            <button title="Editar" class="text-gray-500 hover:text-gray-200 px-1" onclick="startEdit('${id}')">✏️</button>
+            <button title="Timer" class="px-2 py-2 rounded-xl btn-primary" onclick="openTimer('${name}')">⏱️</button>
+            <button title="Excluir" class="px-2 py-2 rounded-xl btn-danger" onclick="deleteExercise('${day}','${name}')">🗑️</button>
+          </div>
+        </div>
+
+        <div class="mt-4">
+          <div class="flex items-center justify-between text-xs mb-1 text-gray-400">
+            <span>XP do exercício</span>
+            <span data-pct="label">${pct}%</span>
+          </div>
+          <div class="xpbar"><div class="xpfill" data-pct="bar" style="width:${pct}%"></div></div>
+          <p class="text-xs text-gray-500 mt-2">Meta: <span data-target="value">${Math.round(targetFor(pr))}</span></p>
+        </div>
+      `;
+      }
       cardsBox.appendChild(card);
     });
 
@@ -400,11 +438,11 @@
     const pr = state.prs[id] || 0;
     const pct = progressPct(vol, pr);
 
-    card.querySelector('[data-vol="value"]').textContent = Math.round(vol);
-    card.querySelector('[data-target="value"]').textContent = Math.round(targetFor(pr));
-    card.querySelector('[data-pct="label"]').textContent = pct + "%";
-    card.querySelector('[data-pct="bar"]').style.width = pct + "%";
-    updateDayXP();
+      card.querySelector('[data-vol="value"]').textContent = Math.round(vol);
+      card.querySelector('[data-target="value"]').textContent = Math.round(targetFor(pr));
+      card.querySelector('[data-pct="label"]').textContent = pct + "%";
+      card.querySelector('[data-pct="bar"]').style.width = pct + "%";
+      updateDayXP();
   }
 
   function saveExercise(id, btnEl) {
@@ -445,6 +483,8 @@
     card.querySelector('[data-target="value"]').textContent = Math.round(targetFor(pr));
     card.querySelector('[data-pct="label"]').textContent = pct + "%";
     card.querySelector('[data-pct="bar"]').style.width = pct + "%";
+    editingCardId = null;
+    renderCards(currentDay);
     updateDayXP();
   }
 
@@ -453,6 +493,16 @@
     if (state.prs && state.prs[id]) delete state.prs[id];
     saveState();
     setDay(currentDay);
+  }
+
+  function startEdit(id) {
+    editingCardId = id;
+    renderCards(currentDay);
+  }
+
+  function cancelEdit() {
+    editingCardId = null;
+    renderCards(currentDay);
   }
 
   function updateDayXP() {
@@ -532,6 +582,8 @@
   window.resetExercise = resetExercise;
   window.deleteExercise = deleteExercise;
   window.saveExercise = saveExercise;
+  window.startEdit = startEdit;
+  window.cancelEdit = cancelEdit;
 
   // ===== Gerenciar treinos =====
   const daysModal = document.getElementById("daysModal");
