@@ -61,6 +61,17 @@ body {
 }
 .btn-danger:hover { filter: brightness(1.06); }
 
+.badge-metric {
+  background: linear-gradient(90deg, var(--c1), var(--c2));
+  color: #0b0f1a;
+  box-shadow: var(--glow);
+  border-radius: 0.5rem;
+  padding: 2px 6px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  display: inline-block;
+}
+
 .xpbar {
   height: 10px;
   background: #0f172a;
