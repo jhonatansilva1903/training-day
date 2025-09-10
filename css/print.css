@@ -1,4 +1,9 @@
 @media print {
   body { background: #fff; color: #000; }
   button, nav { display: none !important; }
+  .badge-metric {
+    box-shadow: none !important;
+    background: #e5e7eb !important;
+    color: #000 !important;
+  }
 }

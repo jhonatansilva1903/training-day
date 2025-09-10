@@ -22,25 +22,25 @@
   const SEED =
     window.__SEED__ || {
       "Treino A": [
-        "Supino reto barra",
-        "Supino inclinado halteres",
-        "Desenvolvimento halteres",
+        "Supino reto com barra",
+        "Supino inclinado com halteres",
+        "Desenvolvimento militar",
         "Elevação lateral",
-        "Tríceps corda (pushdown)",
+        "Tríceps testa",
+        "Prancha",
       ],
       "Treino B": [
-        "Puxada frente barra",
         "Remada curvada",
-        "Remada baixa",
-        "Rosca direta barra",
-        "Rosca alternada",
+        "Puxada na frente (pulldown)",
+        "Rosca direta",
+        "Abdominal crunch",
       ],
       "Treino C": [
         "Agachamento livre",
         "Leg press",
-        "Mesa flexora",
+        "Cadeira extensora",
+        "Cadeira flexora",
         "Panturrilha em pé",
-        "Abdominal crunch",
       ],
     };
   const STORAGE_KEY = "training_day_state_v1";
@@ -50,16 +50,16 @@
 
   // ===== Combobox =====
   const EXERCISE_OPTIONS = [
-    "Supino reto barra",
-    "Supino inclinado barra",
-    "Supino declinado barra",
-    "Supino reto halteres",
-    "Supino inclinado halteres",
+    "Supino reto com barra",
+    "Supino inclinado com barra",
+    "Supino declinado com barra",
+    "Supino reto com halteres",
+    "Supino inclinado com halteres",
     "Crucifixo halteres",
     "Voador máquina",
     "Cross-over cabo alto",
     "Cross-over cabo baixo",
-    "Puxada frente barra",
+    "Puxada na frente (pulldown)",
     "Puxada aberta",
     "Puxada neutra",
     "Remada curvada",
@@ -72,18 +72,18 @@
     "Hack squat",
     "Leg press",
     "Cadeira extensora",
-    "Mesa flexora",
+    "Cadeira flexora",
     "Stiff com halteres",
     "Stiff barra",
     "Panturrilha em pé",
     "Panturrilha sentado",
-    "Desenvolvimento halteres",
+    "Desenvolvimento militar",
     "Desenvolvimento barra",
     "Elevação lateral",
     "Elevação frontal",
     "Remada alta",
     "Arnold press",
-    "Rosca direta barra",
+    "Rosca direta",
     "Rosca alternada",
     "Rosca martelo",
     "Rosca scott",
@@ -103,6 +103,24 @@
     "Reverse grip pull down",
     "Novo exercício"
   ];
+
+  const DEFAULT_META = {
+    "Supino reto com barra": { defaultSets: 3, defaultReps: "8-10", defaultLoadKg: 20 },
+    "Supino inclinado com halteres": { defaultSets: 3, defaultReps: "8-10", defaultLoadKg: 20 },
+    "Desenvolvimento militar": { defaultSets: 3, defaultReps: "8-10", defaultLoadKg: 10 },
+    "Elevação lateral": { defaultSets: 3, defaultReps: "12-15", defaultLoadKg: 5 },
+    "Tríceps testa": { defaultSets: 3, defaultReps: "12", defaultLoadKg: 15 },
+    "Remada curvada": { defaultSets: 3, defaultReps: "8-10", defaultLoadKg: 30 },
+    "Puxada na frente (pulldown)": { defaultSets: 3, defaultReps: "8-10", defaultLoadKg: 30 },
+    "Rosca direta": { defaultSets: 3, defaultReps: "12", defaultLoadKg: 20 },
+    "Prancha": { defaultSets: 3, defaultReps: "30", defaultLoadKg: 0 },
+    "Abdominal crunch": { defaultSets: 3, defaultReps: "15", defaultLoadKg: 0 },
+    "Agachamento livre": { defaultSets: 3, defaultReps: "8", defaultLoadKg: 20 },
+    "Leg press": { defaultSets: 3, defaultReps: "10", defaultLoadKg: 60 },
+    "Cadeira extensora": { defaultSets: 3, defaultReps: "12", defaultLoadKg: 20 },
+    "Cadeira flexora": { defaultSets: 3, defaultReps: "12", defaultLoadKg: 20 },
+    "Panturrilha em pé": { defaultSets: 4, defaultReps: "15-20", defaultLoadKg: 25 },
+  };
 
   (function ensureExerciseOptions() {
     const dl = document.getElementById("exerciseOptions");
@@ -155,6 +173,34 @@
   };
   const keyOf = (day, name) => `${day}::${name}`;
   const lastLog = (id) => (state.logs[id] || []).slice(-1)[0] || null;
+
+  function seedDefaults() {
+    if (localStorage.getItem(STORAGE_KEY) || localStorage.getItem(PLAN_KEY)) return;
+    Object.keys(plan.days).forEach((day) => {
+      plan.days[day].forEach((name) => {
+        const meta = DEFAULT_META[name];
+        if (!meta) return;
+        const id = keyOf(day, name);
+        const firstReps = parseInt(String(meta.defaultReps).split(/[^0-9]/)[0], 10) || 0;
+        const vol = volume(meta.defaultLoadKg, firstReps);
+        if (!state.logs[id]) state.logs[id] = [];
+        state.logs[id].push({
+          date: new Date().toISOString().slice(0, 10),
+          load: meta.defaultLoadKg,
+          reps: firstReps,
+          sets: meta.defaultSets,
+          volume: vol,
+        });
+        state.prs[id] = vol;
+      });
+    });
+    saveState();
+    localStorage.setItem('td:schemaVersion', '2');
+    localStorage.setItem('td:data:v2', JSON.stringify(plan));
+    savePlan();
+  }
+
+  seedDefaults();
 
   // ===== Seletores =====
   const tabs = document.getElementById("daysTabs");
@@ -283,16 +329,19 @@
         <div class="grid grid-cols-3 gap-3 mt-4">
           <label class="flex flex-col text-sm">
             <span class="text-gray-400">Carga (kg)</span>
+            <span class="badge-metric mt-1" data-badge="load">${last ? (last.load ?? 0) : 0}</span>
             <input type="number" step="0.5" min="0" class="mt-1 rounded-lg bg-[#0b1220] border border-gray-700 px-3 py-2"
               value="${last ? (last.load ?? "") : ""}" data-id="${id}" data-field="load"/>
           </label>
           <label class="flex flex-col text-sm">
             <span class="text-gray-400">Repetições</span>
+            <span class="badge-metric mt-1" data-badge="reps">${last ? (last.reps ?? 0) : 0}</span>
             <input type="number" step="1" min="0" class="mt-1 rounded-lg bg-[#0b1220] border border-gray-700 px-3 py-2"
               value="${last ? (last.reps ?? "") : ""}" data-id="${id}" data-field="reps"/>
           </label>
           <label class="flex flex-col text-sm">
             <span class="text-gray-400">Séries</span>
+            <span class="badge-metric mt-1" data-badge="sets">${last ? (last.sets ?? 0) : 0}</span>
             <input type="number" step="1" min="0" class="mt-1 rounded-lg bg-[#0b1220] border border-gray-700 px-3 py-2"
               value="${last ? (last.sets ?? "") : ""}" data-id="${id}" data-field="sets"/>
           </label>
@@ -325,9 +374,15 @@
               PR: <span data-pr="value">${Math.round(pr)}</span> • Volume atual:
               <span data-vol="value">${Math.round(vol)}</span>
             </p>
-            <p class="text-sm text-gray-300 mt-2">
-              ${last ? `${last.load || 0} kg • ${last.reps || 0} reps • ${last.sets || 0} séries` : "Sem dados"}
-            </p>
+            <div class="mt-2">
+              ${last
+                ? `<div class="flex flex-wrap gap-2">
+                    <span class="badge-metric" data-badge="load">${last.load || 0}</span>
+                    <span class="badge-metric" data-badge="reps">${last.reps || 0}</span>
+                    <span class="badge-metric" data-badge="sets">${last.sets || 0}</span>
+                  </div>`
+                : `<span class="text-sm text-gray-500">Sem dados</span>`}
+            </div>
           </div>
           <div class="flex items-center gap-1">
             <button title="Editar" class="text-gray-500 hover:text-gray-200 px-1" onclick="startEdit('${id}')">✏️</button>
@@ -434,14 +489,20 @@
     const card = e.target.closest(".card");
     const load = Number(card.querySelector('input[data-field="load"][data-id="' + id + '"]').value || 0);
     const reps = Number(card.querySelector('input[data-field="reps"][data-id="' + id + '"]').value || 0);
+    const setsVal = Number(card.querySelector('input[data-field="sets"][data-id="' + id + '"]').value || 0);
     const vol = volume(load, reps);
     const pr = state.prs[id] || 0;
     const pct = progressPct(vol, pr);
-
       card.querySelector('[data-vol="value"]').textContent = Math.round(vol);
       card.querySelector('[data-target="value"]').textContent = Math.round(targetFor(pr));
       card.querySelector('[data-pct="label"]').textContent = pct + "%";
       card.querySelector('[data-pct="bar"]').style.width = pct + "%";
+      const lb = card.querySelector('[data-badge="load"]');
+      const rb = card.querySelector('[data-badge="reps"]');
+      const sb = card.querySelector('[data-badge="sets"]');
+      if (lb) lb.textContent = load || 0;
+      if (rb) rb.textContent = reps || 0;
+      if (sb) sb.textContent = setsVal || 0;
       updateDayXP();
   }
 
